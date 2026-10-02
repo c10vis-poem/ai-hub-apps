@@ -19,18 +19,21 @@ jobs:
           pip install qai-hub-apps
           qai-hub-apps fetch geniex_chat_android --output-dir "$RUNNER_TEMP/app"
           ls -la "$RUNNER_TEMP/app"
+          APP_DIR="$(dirname "$(find "$RUNNER_TEMP/app" -name build.sh -path '*geniex_chat_android*' | head -1)")"
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          ls -la "$APP_DIR" "$APP_DIR/scripts"
       - uses: actions/checkout@v4
         with:
           repository: qualcomm/ai-hub-apps
           ref: main
           path: upstream
       - name: Build Qualcomm's Android base image locally (ghcr image is private)
-        run: docker build -f upstream/tools/docker/android.dockerfile -t qaiha-android-base:local upstream
+        run: docker build -f upstream/tools/docker/android.dockerfile -t qaiha-android-base:local "$APP_DIR"
       - name: Build APK (app's own Docker build)
         env:
           QAIHA_BASE_IMAGE: qaiha-android-base:local
         run: |
-          cd "$(dirname "$(find "$RUNNER_TEMP/app" -name build.sh -path '*geniex_chat_android*' | head -1)")"
+          cd "$APP_DIR"
           bash build.sh --docker
           find . -name '*.apk' -print
           mkdir -p "$GITHUB_WORKSPACE/out" && find . -name '*.apk' -exec cp {} "$GITHUB_WORKSPACE/out/" \;
