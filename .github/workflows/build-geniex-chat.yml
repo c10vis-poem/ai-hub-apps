@@ -1,0 +1,32 @@
+name: Build GenieX Chat APK
+# Builds Qualcomm's GenieX Chat Android app exactly as its README documents:
+# `qai-hub-apps fetch geniex_chat_android`, then the app's own Docker-based build.sh.
+# The APK is uploaded as a workflow artifact (download it, install on the phone).
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch app source (official CLI)
+        run: |
+          pip install qai-hub-apps
+          qai-hub-apps fetch geniex_chat_android --output-dir "$RUNNER_TEMP/app"
+          ls -la "$RUNNER_TEMP/app"
+      - name: Build APK (app's own Docker build)
+        run: |
+          cd "$(dirname "$(find "$RUNNER_TEMP/app" -name build.sh -path '*geniex_chat_android*' | head -1)")"
+          bash build.sh --docker
+          find . -name '*.apk' -print
+          mkdir -p "$GITHUB_WORKSPACE/out" && find . -name '*.apk' -exec cp {} "$GITHUB_WORKSPACE/out/" \;
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geniex-chat-apk
+          path: out/*.apk
+          if-no-files-found: error
