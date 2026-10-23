@@ -14,14 +14,15 @@ from typing import Any
 
 import gi
 import numpy as np
-import qai_hub_apps_utils.webui as ui
 import utils.constants as C
 from ai_edge_litert.interpreter import Delegate, Interpreter
+from qai_hub_apps_utils.config import AppInfo
 from qai_hub_apps_utils.fps import FpsCounter
 from qai_hub_apps_utils.image_processing import resize_pad
 from qai_hub_apps_utils.input_devices import get_default_video_device
 from qai_hub_apps_utils.platform import get_current_device
 from qai_hub_apps_utils.quantization import dequantize, quantize
+from qai_hub_apps_utils.webui import WebUI
 from utils.input_processing import get_gstreamer_input_pipeline
 from utils.model_io_processing import blend_mask, decode_mask
 from utils.model_metadata import load_model_metadata
@@ -319,7 +320,20 @@ def main(args: argparse.Namespace) -> None:
     timings = {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
     profiled_frames = 0
 
+    info = AppInfo.load()
+    model_section = {
+        "title": "Model",
+        "rows": [
+            ("Model", info.name),
+            ("Use case", info.use_case),
+            ("Precision", ", ".join(info.precisions)),
+            ("Backend", f"{info.runtime.upper()} (NPU)"),
+            ("Weights", metadata.model_filename),
+        ],
+    }
     try:
+        ui = WebUI()
+        ui.set_title(info.name)
         ui.start_thread()
         while True:
             rgb_frame = outq.get(timeout=5)
@@ -346,7 +360,46 @@ def main(args: argparse.Namespace) -> None:
 
             fps_counter.tick()
 
+            # bincount: the class ids are a small fixed uint8 range,
+            # so this counts in one pass instead of sorting every pixel per frame.
+            counts = np.bincount(class_map.ravel(), minlength=C.NUM_CLASSES)
+            foreground = [
+                (int(cls), int(count))
+                for cls, count in enumerate(counts)
+                if count and cls != C.BACKGROUND_CLASS
+            ]
+            foreground.sort(key=lambda item: item[1], reverse=True)
+            total_px = class_map.size
             ui.set_frame(rgb_frame[..., ::-1])
+            ui.set_sections(
+                [
+                    model_section,
+                    {
+                        "title": "Segmentation",
+                        "rows": [
+                            ("FPS", f"{fps_counter.fps():.1f}"),
+                            ("Classes present", str(len(foreground))),
+                            (
+                                "Coverage",
+                                f"{sum(c for _, c in foreground) / total_px:.0%}",
+                            ),
+                            *(
+                                [
+                                    (
+                                        "Top classes",
+                                        [
+                                            (f"class {cls}", f"{count / total_px:.0%}")
+                                            for cls, count in foreground[:5]
+                                        ],
+                                    )
+                                ]
+                                if foreground
+                                else []
+                            ),
+                        ],
+                    },
+                ]
+            )
 
     except queue.Empty:
         print("Timed out waiting for input! Exiting...")

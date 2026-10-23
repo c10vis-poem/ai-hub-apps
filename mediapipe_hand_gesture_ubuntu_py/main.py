@@ -13,13 +13,13 @@ from typing import Any
 import cv2
 import gi
 import numpy as np
-import qai_hub_apps_utils.webui as ui
 import utils.constants as C
 from ai_edge_litert.interpreter import Delegate, Interpreter
 from qai_hub_apps_utils.bbox_processing import (
     batched_nms,
     compute_box_affine_crop_resize_matrix,
 )
+from qai_hub_apps_utils.config import AppInfo
 from qai_hub_apps_utils.fps import FpsCounter
 from qai_hub_apps_utils.image_processing import (
     apply_affine_to_coordinates,
@@ -30,6 +30,7 @@ from qai_hub_apps_utils.image_processing import (
 from qai_hub_apps_utils.input_devices import get_default_video_device
 from qai_hub_apps_utils.platform import get_current_device
 from qai_hub_apps_utils.quantization import dequantize, quantize
+from qai_hub_apps_utils.webui import WebUI
 from utils.draw import draw_predictions
 from utils.input_processing import get_gstreamer_input_pipeline
 from utils.model_io_processing import compute_object_roi, preprocess_hand_x64
@@ -431,7 +432,9 @@ def main(args: argparse.Namespace) -> None:
         "models/hand_landmark_detector.tflite", experimental_delegates=[delegate]
     )
 
-    gesture_classifier = Interpreter("models/canned_gesture_classifier.tflite")
+    gesture_classifier = Interpreter(
+        "models/canned_gesture_classifier.tflite", experimental_delegates=[delegate]
+    )
 
     hand_detector.allocate_tensors()
     landmark_detector.allocate_tensors()
@@ -458,7 +461,26 @@ def main(args: argparse.Namespace) -> None:
         "--------------------------- Web server ----------------------------",
         flush=True,
     )
+    info = AppInfo.load()
+    model_section = {
+        "title": "Model",
+        "rows": [
+            ("Model", info.name),
+            ("Use case", info.use_case),
+            ("Precision", ", ".join(info.precisions)),
+            (
+                "Components",
+                [
+                    ("Palm detector", "TFLITE (NPU)"),
+                    ("Landmark detector", "TFLITE (NPU)"),
+                    ("Gesture classifier", "TFLITE (NPU)"),
+                ],
+            ),
+        ],
+    }
     try:
+        ui = WebUI()
+        ui.set_title(info.name)
         ui.start_thread()
         while True:
             rgb_frame = outq.get(timeout=5)
@@ -486,7 +508,30 @@ def main(args: argparse.Namespace) -> None:
 
             fps_counter.tick()
 
+            # run_inference batches its results; this loop feeds a single frame.
+            hand_sides = [
+                "right" if right else "left"
+                for right in (is_right[0] if is_right else [])
+            ]
+            hand_gestures = gestures[0] if gestures else []
             ui.set_frame(rgb_frame[..., ::-1])
+            ui.set_sections(
+                [
+                    model_section,
+                    {
+                        "title": "Detections",
+                        "rows": [
+                            ("FPS", f"{fps_counter.fps():.1f}"),
+                            ("Hands", str(len(hand_sides))),
+                            (
+                                "Handedness",
+                                ", ".join(hand_sides) or "-",
+                            ),
+                            ("Gestures", ", ".join(hand_gestures) or "-"),
+                        ],
+                    },
+                ]
+            )
 
     except queue.Empty:
         print("Timed out waiting for input! Exiting...")

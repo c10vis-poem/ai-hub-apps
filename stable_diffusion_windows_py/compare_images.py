@@ -6,6 +6,7 @@
 
 Usage:
     python compare_images.py <generated> <reference> [--threshold 20]
+        [--swap-reference-channels]
 
 Exits 0 if MAD < threshold, 1 otherwise.
 """
@@ -27,6 +28,11 @@ def main() -> None:
         default=20.0,
         help="Maximum allowed mean absolute difference (0-255 scale)",
     )
+    parser.add_argument(
+        "--swap-reference-channels",
+        action="store_true",
+        help="Reverse the reference image's channel order (for a reference saved as BGR)",
+    )
     args = parser.parse_args()
 
     gen = np.array(Image.open(args.generated).convert("RGB"), dtype=float)
@@ -39,6 +45,9 @@ def main() -> None:
             .resize((gen.shape[1], gen.shape[0]), Image.LANCZOS),
             dtype=float,
         )
+
+    if args.swap_reference_channels:
+        ref = ref[..., ::-1]
 
     mad = float(np.mean(np.abs(gen - ref)))
     print(f"Mean absolute difference: {mad:.4f} (threshold: {args.threshold})")

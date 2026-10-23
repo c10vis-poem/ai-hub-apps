@@ -31,7 +31,7 @@ HAAR_CASCADE_FILENAME = "haarcascade_frontalface_default.xml"
 # face (in the detection-resolution frame) to report.
 DETECTION_SCALE_FACTOR = 1.1
 DETECTION_MIN_NEIGHBORS = 5
-DETECTION_MIN_SIZE = (60, 60)
+DETECTION_MIN_SIZE = (40, 40)
 
 # Detection runs on the frame downscaled so its width is at most this many
 # pixels (boxes are mapped back to full-frame coordinates). This is the main
@@ -45,7 +45,7 @@ BOX_MARGIN = 0.2
 
 # ---------------------------------------------------------------------
 # Overlay drawing. Colors are RGB — frames are RGB in the pipeline and only
-# flipped to BGR by webui.set_frame(frame[..., ::-1]) just before JPEG encoding.
+# flipped to BGR by WebUI.set_frame(frame[..., ::-1]) just before JPEG encoding.
 # ---------------------------------------------------------------------
 KNOWN_COLOR = (0, 255, 0)
 UNKNOWN_COLOR = (255, 0, 0)

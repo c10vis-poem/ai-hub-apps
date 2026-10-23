@@ -13,13 +13,14 @@ from typing import Any
 import cv2
 import gi
 import numpy as np
-import qai_hub_apps_utils.webui as ui
 import utils.constants as C
 from ai_edge_litert.interpreter import Delegate, Interpreter
+from qai_hub_apps_utils.config import AppInfo
 from qai_hub_apps_utils.fps import FpsCounter
 from qai_hub_apps_utils.input_devices import get_default_video_device
 from qai_hub_apps_utils.platform import get_current_device
 from qai_hub_apps_utils.quantization import dequantize, quantize
+from qai_hub_apps_utils.webui import WebUI
 from utils.input_processing import get_gstreamer_input_pipeline
 from utils.model_io_processing import (
     blend_mask,
@@ -259,7 +260,20 @@ def main(args: argparse.Namespace) -> None:
         "--------------------------- Web server ----------------------------",
         flush=True,
     )
+    info = AppInfo.load()
+    model_section = {
+        "title": "Model",
+        "rows": [
+            ("Model", info.name),
+            ("Use case", info.use_case),
+            ("Precision", ", ".join(info.precisions)),
+            ("Backend", f"{info.runtime.upper()} (NPU)"),
+            ("Weights", metadata.model_filename),
+        ],
+    }
     try:
+        ui = WebUI()
+        ui.set_title(info.name)
         ui.start_thread()
         while True:
             rgb_frame = outq.get(timeout=5)
@@ -288,6 +302,19 @@ def main(args: argparse.Namespace) -> None:
             fps_counter.tick()
 
             ui.set_frame(rgb_frame[..., ::-1])
+            ui.set_sections(
+                [
+                    model_section,
+                    {
+                        "title": "Segmentation",
+                        "rows": [
+                            ("FPS", f"{fps_counter.fps():.1f}"),
+                            ("Background", bg_mode),
+                            ("Subject coverage", f"{float(prob.mean()):.0%}"),
+                        ],
+                    },
+                ]
+            )
 
     except queue.Empty:
         print("Timed out waiting for input! Exiting...")
